@@ -14,11 +14,11 @@ output:
 library(tibble)
 ```
 # Overview
-This project aims to analyze publicly available scRNAseq data by comparing 23 samples with ankylosing spondylitis to 21 healthy samples, all from blood. 2 healthy and 2 AS samples were collected by the Kuhn lab, 10 AS and 29 healthy samples were obtained from public data collected by the University of California, San Francisco (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE194315), and  4 AS samples were collected from ArrayExpress (https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-10948?query=E-MTAB-10948). Some collected samples were not blood and were dropped. A total of 23 diseased and 21 healthy samples were used for this analysis.
+This project aims to analyze publicly available scRNAseq data by comparing 16 samples with ankylosing spondylitis to 22 healthy samples, all from blood. 2 healthy and 2 AS samples were collected by the Kuhn lab, 10 AS and 20 healthy samples were obtained from public data collected by the University of California, San Francisco (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE194315), and  4 AS samples were collected from ArrayExpress (https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-10948?query=E-MTAB-10948). Some collected samples were not blood and were dropped. A total of 16 diseased and 22 healthy samples were used for this analysis.
 
-The samples collected by the Kuhn lab were provided as fastq files. These samples were mapped to a reference genome with starSolo to generate the count matrix, barcode, and gene list files for Seurat. All samples were integrated into a Seurat pipeline to create a Seurat object with all of the sample information. This Seurat object was used as input for the following DESeq2 pipeline.
+The samples collected by the Kuhn lab were provided as fastq files. These samples were mapped to a reference genome with starSolo to generate the count matrix, barcode, and gene list files for Seurat. All samples were integrated into a Seurat pipeline to create a Seurat object with all of the sample information. This Seurat object was used as input for the following Wilcoxon rank sum test pipeline.
 
-An an all-vs-all comparison of differential gene expression was performed using DESeq2 and creating volcano plots from these results. Additionally, the gene lists from DESeq2 were used as input for Enrichr, which is a pathway analysis tool. Following this analysis, a comparison of healthy to diseased samples was performed on 5 unique cell types, Naive CD4, CD14 Monocytes, Memory CD4, CD8 T, and FCGR3A Monocytes. Cell clusters were identified using the FindMarkers function in Seurat. The barcodes for these cell types were subsetted and DESeq2 was used to perfom differential gene expression on these subsets. Volcano plots were generated from these results and the gene lists were used as input for Enrichr. 
+An an all-vs-all comparison of differential gene expression was performed using Wilcoxon and creating volcano plots from these results. Additionally, the gene lists from Wilcoxon were used as input for Enrichr, which is a pathway analysis tool. Following this analysis, a comparison of healthy to diseased samples was performed on 5 unique cell types, Naive CD4, CD14 Monocytes, Memory CD4, CD8 T, and FCGR3A Monocytes. Cell clusters were identified using the FindMarkers function in Seurat. The barcodes for these cell types were subsetted and a Wilcoxon rank sum test was used to perform differential gene expression on these subsets. Volcano plots were generated from these results and the gene lists were used as input for Enrichr. 
 
 # Downloading Data
 
@@ -1086,9 +1086,12 @@ ggsave(filename = "cluster_ID.pdf", plot = cluster_ID, width = 8, height = 6, dp
 ![Cell_Clusters.png](Umaps/Cell_Clusters.png)
 
 # DEG analysis
-This script was used to perform differential gene expression with DEseq2. Pseudobulking was executed based on disease grouping, cluster number, and sample ID. Groups were created using the Idents from the Seurat object. Diseased and healthy groups for each cell type were manually subsetted based on these Ident labels. Genes with counts of 0 were filtered out of the dataset and DESeq2 was run on the filtered object. Each comparison was saved as a rds object that contain gene lists, p-values, log fold change values, and adjusted p-values. For the final step, volcano plots were created using the log fold change and adjusted p-values from the DESeq2 results and the top 10 significant genes were labeled. Adjusted p-values were calculated using the Benjamini-Hochberg procedure to control the false discovery rate. Significance was defined as an adjusted p-value less than 0.05 and a log fold change greater than 1. Each plot was saved as a png. 
 
-```{r eval = FALSE}
+### DESeq2
+
+This script was used to perform differential gene expression with DEseq2 for the initial analysis. Pseudobulking was executed based on disease grouping, cluster number, and sample ID. Groups were created using the Idents from the Seurat object. Diseased and healthy groups for each cell type were manually subsetted based on these Ident labels. Genes with counts of 0 were filtered out of the dataset and DESeq2 was run on the filtered object. Each comparison was saved as a rds object that contain gene lists, p-values, log fold change values, and adjusted p-values. For the final step, volcano plots were created using the log fold change and adjusted p-values from the DESeq2 results and the top 10 significant genes were labeled. Adjusted p-values were calculated using the Benjamini-Hochberg procedure to control the false discovery rate. Significance was defined as an adjusted p-value less than 0.05 and a log fold change greater than 1. Each plot was saved as a png. Although DESeq2 was successful for an all-vs all comparison of differentially expressed genes in healthy vs AS samples, I decided against using this pipeline for the final results because DESeq2 could not handle the sparsity of the datasets with subsetted cell types. 
+
+```{r eval = FALSE, restults='hide'}
 library(Seurat)
 library(ggplot2)
 library(dplyr)
@@ -1561,108 +1564,689 @@ print("Pseudobulk analysis and volcano plots complete.")
 
 ```
 
+
+
+### Wilcoxon Rank Sum Test
+
+This script was used to perform differential gene expression with the Wilcoxon rank sum test. Pseudobulking was removed for this script to conserve cell counts in cell subsets. A normalized count matrix pulled from the Seurat object was the input for this test. Groups were created using the Idents from the Seurat object. Diseased and healthy groups for each cell type were manually subsetted based on these Ident labels. Genes with counts of 0 were filtered out of the dataset and Wilcox was run on the filtered object. Each comparison was saved as a rds object that contain gene lists, p-values, log fold change values, and adjusted p-values. For the final step, volcano plots were created using the log fold change and adjusted p-values from the Wilcox results and the top 15 significant upregulated and downregulated genes were labeled. Upregulated genes in the disease group are red and down regulated genes in the disease group are blue. Adjusted p-values were calculated using the Benjamini-Hochberg procedure to control the false discovery rate. Significance was defined as an adjusted p-value less than 0.05 and a log fold change greater than 1. Each plot was saved as a png. 
+
+```{r, eval=FALSE}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(Matrix)
+library(DESeq2)
+library(ggrepel)
+library(tidyr)
+
+# Step 1: Load the Seurat Object
+
+# Load the Seurat object
+merged_seurat <- readRDS("/scratch/alpine/ceck@xsede.org/Kuhn_Data/umap_harmony.rds")
+print("Data Loaded")
+
+# Print the dimensions of the Seurat object
+print(dim(merged_seurat))
+print(head(merged_seurat))
+
+# Check the cell distribution across combined groups
+print(table(Idents(merged_seurat)))
+
+# Step 2: Seperate the combined diseased groups and seperate healthy
+# Create a new 'disease_grouped' column with two groups: "AS_Group" and "Healthy"
+merged_seurat@meta.data$disease_grouped <- ifelse(
+  merged_seurat@meta.data$disease %in% c("AXI", "ankylosing_spondylitis", "Spondyloarthritis"), 
+  "AS_Group", 
+  "Healthy"
+)
+print("Groups Created")
+
+
+# Join layers to access data
+merged_seurat <- JoinLayers(merged_seurat)
+
+
+# Check the cell distribution across combined groups
+print(table(Idents(merged_seurat)))
+print("Join Layers Complete")
+
+
+
+# Create a combined ID of disease group and cluster
+merged_seurat$combined_id <- paste(
+  merged_seurat@meta.data$disease_grouped,
+  merged_seurat@meta.data$seurat_clusters,
+  merged_seurat@meta.data$sample,
+  sep = "_"
+)
+Idents(merged_seurat) <- "combined_id"
+
+
+
+# Check the identities in merged_seurat
+print("Available Idents:")
+print(unique(Idents(merged_seurat)))
+# Check the combined ID field
+#print("Combined IDs:")
+#print(merged_seurat$combined_id)
+# Verify cluster names in the metadata
+print("Unique clusters:")
+print(unique(merged_seurat$seurat_clusters))
+
+
+#Step 4: Subset the identities to be used in analysis
+# Get the identities to keep
+idents_to_keep <- c("AS_Group_0_27B", "AS_Group_0_AS01PB", "AS_Group_0_AS02PB", "AS_Group_0_PBMC_02_1_AXI", 
+                    "AS_Group_0_PBMC_02_2_AXI", "AS_Group_0_PBMC_02_3_AXI", "AS_Group_0_PBMC_02_4_AXI", 
+                    "AS_Group_0_PBMC_03_1_AXI", "AS_Group_0_PBMC_03_2_AXI", "AS_Group_0_PBMC_03_3_AXI", 
+                    "AS_Group_0_PBMC_03_4_AXI", "AS_Group_0_PBMC_04_1_AXI", "AS_Group_0_PBMC_04_2_AXI", 
+                    "AS_Group_0_PBMC_04_3_AXI", "AS_Group_0_PBMC_04_4_AXI", "AS_Group_0_PBMC_05_1_AXI", 
+                    "AS_Group_0_PBMC_05_2_AXI", "AS_Group_0_PBMC_05_3_AXI", "AS_Group_0_PBMC_05_4_AXI", 
+                    "AS_Group_0_PBMC_07_1", "AS_Group_0_PBMC_07_2", "AS_Group_0_PBMC_07_3", "AS_Group_0_PBMC_07_4",
+                    "AS_Group_1_AS01PB", "AS_Group_1_AS02PB", "AS_Group_1_PBMC_02_1_AXI", 
+                    "AS_Group_1_PBMC_02_2_AXI", "AS_Group_1_PBMC_02_3_AXI", "AS_Group_1_PBMC_02_4_AXI", 
+                    "AS_Group_1_PBMC_03_1_AXI", "AS_Group_1_PBMC_03_2_AXI", "AS_Group_1_PBMC_03_3_AXI", 
+                    "AS_Group_1_PBMC_03_4_AXI", "AS_Group_1_PBMC_04_1_AXI", "AS_Group_1_PBMC_04_2_AXI", 
+                    "AS_Group_1_PBMC_04_3_AXI", "AS_Group_1_PBMC_04_4_AXI", "AS_Group_1_PBMC_05_1_AXI", 
+                    "AS_Group_1_PBMC_05_2_AXI", "AS_Group_1_PBMC_05_3_AXI", "AS_Group_1_PBMC_05_4_AXI", 
+                    "AS_Group_1_PBMC_07_1", "AS_Group_1_PBMC_07_2", "AS_Group_1_PBMC_07_3", 
+                    "AS_Group_1_PBMC_07_4",
+                    "AS_Group_2_AS01PB", "AS_Group_2_AS02PB", "AS_Group_2_PBMC_02_1_AXI", 
+                    "AS_Group_2_PBMC_02_2_AXI", "AS_Group_2_PBMC_02_3_AXI", "AS_Group_2_PBMC_02_4_AXI", 
+                    "AS_Group_2_PBMC_03_1_AXI", "AS_Group_2_PBMC_03_2_AXI", "AS_Group_2_PBMC_03_3_AXI", 
+                    "AS_Group_2_PBMC_03_4_AXI", "AS_Group_2_PBMC_04_1_AXI", "AS_Group_2_PBMC_04_2_AXI", 
+                    "AS_Group_2_PBMC_04_3_AXI", "AS_Group_2_PBMC_04_4_AXI", "AS_Group_2_PBMC_05_1_AXI", 
+                    "AS_Group_2_PBMC_05_2_AXI", "AS_Group_2_PBMC_05_3_AXI", "AS_Group_2_PBMC_05_4_AXI", 
+                    "AS_Group_2_PBMC_07_1", "AS_Group_2_PBMC_07_2", "AS_Group_2_PBMC_07_3", 
+                    "AS_Group_2_PBMC_07_4",
+                    "AS_Group_4_AS01PB", "AS_Group_4_AS02PB", 
+                    "AS_Group_4_PBMC_02_1_AXI", "AS_Group_4_PBMC_02_2_AXI", 
+                    "AS_Group_4_PBMC_02_3_AXI", "AS_Group_4_PBMC_02_4_AXI", 
+                    "AS_Group_4_PBMC_03_1_AXI", "AS_Group_4_PBMC_03_2_AXI", 
+                    "AS_Group_4_PBMC_03_3_AXI", "AS_Group_4_PBMC_03_4_AXI", 
+                    "AS_Group_4_PBMC_04_1_AXI", "AS_Group_4_PBMC_04_2_AXI", 
+                    "AS_Group_4_PBMC_04_3_AXI", "AS_Group_4_PBMC_04_4_AXI", 
+                    "AS_Group_4_PBMC_05_1_AXI", "AS_Group_4_PBMC_05_2_AXI", 
+                    "AS_Group_4_PBMC_05_3_AXI", "AS_Group_4_PBMC_05_4_AXI", 
+                    "AS_Group_4_PBMC_07_1", "AS_Group_4_PBMC_07_2", 
+                    "AS_Group_4_PBMC_07_3", "AS_Group_4_PBMC_07_4",
+                    "AS_Group_5_AS01PB", 
+                    "AS_Group_5_AS02PB", "AS_Group_5_PBMC_02_1_AXI", 
+                    "AS_Group_5_PBMC_02_2_AXI", "AS_Group_5_PBMC_02_3_AXI", 
+                    "AS_Group_5_PBMC_02_4_AXI", "AS_Group_5_PBMC_03_1_AXI", 
+                    "AS_Group_5_PBMC_03_2_AXI", "AS_Group_5_PBMC_03_3_AXI", 
+                    "AS_Group_5_PBMC_03_4_AXI", "AS_Group_5_PBMC_04_1_AXI", 
+                    "AS_Group_5_PBMC_04_2_AXI", "AS_Group_5_PBMC_04_3_AXI", 
+                    "AS_Group_5_PBMC_04_4_AXI", "AS_Group_5_PBMC_05_1_AXI", 
+                    "AS_Group_5_PBMC_05_2_AXI", "AS_Group_5_PBMC_05_3_AXI", 
+                    "AS_Group_5_PBMC_05_4_AXI", "AS_Group_5_PBMC_07_1", 
+                    "AS_Group_5_PBMC_07_2", "AS_Group_5_PBMC_07_3", 
+                    "AS_Group_5_PBMC_07_4",
+                    "Healthy_0_21B", "Healthy_0_PBMC_01_3_Healthy", "Healthy_0_PBMC_01_4_Healthy", 
+                    "Healthy_0_PBMC_02_1_Healthy", "Healthy_0_PBMC_02_2_Healthy", "Healthy_0_PBMC_02_3_Healthy", 
+                    "Healthy_0_PBMC_02_4_Healthy", "Healthy_0_PBMC_03_1_Healthy", "Healthy_0_PBMC_03_2_Healthy", 
+                    "Healthy_0_PBMC_03_3_Healthy", "Healthy_0_PBMC_03_4_Healthy", "Healthy_0_PBMC_04_1_Healthy", 
+                    "Healthy_0_PBMC_04_2_Healthy", "Healthy_0_PBMC_04_3_Healthy", "Healthy_0_PBMC_04_4_Healthy", 
+                    "Healthy_0_PBMC_05_1_Healthy", "Healthy_0_PBMC_05_2_Healthy", "Healthy_0_PBMC_05_3_Healthy", 
+                    "Healthy_0_PBMC_05_4_Healthy",
+                    "Healthy_1_PBMC_01_3_Healthy", "Healthy_1_PBMC_01_4_Healthy", 
+                    "Healthy_1_PBMC_02_1_Healthy", "Healthy_1_PBMC_02_2_Healthy", 
+                    "Healthy_1_PBMC_02_3_Healthy", "Healthy_1_PBMC_02_4_Healthy", 
+                    "Healthy_1_PBMC_03_1_Healthy", "Healthy_1_PBMC_03_2_Healthy", 
+                    "Healthy_1_PBMC_03_3_Healthy", "Healthy_1_PBMC_03_4_Healthy", 
+                    "Healthy_1_PBMC_04_1_Healthy", "Healthy_1_PBMC_04_2_Healthy", 
+                    "Healthy_1_PBMC_04_3_Healthy", "Healthy_1_PBMC_04_4_Healthy", 
+                    "Healthy_1_PBMC_05_1_Healthy", "Healthy_1_PBMC_05_2_Healthy", 
+                    "Healthy_1_PBMC_05_3_Healthy", "Healthy_1_PBMC_05_4_Healthy",
+                    "Healthy_2_PBMC_01_3_Healthy", "Healthy_2_PBMC_01_4_Healthy", 
+                    "Healthy_2_PBMC_02_1_Healthy", "Healthy_2_PBMC_02_2_Healthy", 
+                    "Healthy_2_PBMC_02_3_Healthy", "Healthy_2_PBMC_02_4_Healthy", 
+                    "Healthy_2_PBMC_03_1_Healthy", "Healthy_2_PBMC_03_2_Healthy", 
+                    "Healthy_2_PBMC_03_3_Healthy", "Healthy_2_PBMC_03_4_Healthy", 
+                    "Healthy_2_PBMC_04_1_Healthy", "Healthy_2_PBMC_04_2_Healthy", 
+                    "Healthy_2_PBMC_04_3_Healthy", "Healthy_2_PBMC_04_4_Healthy", 
+                    "Healthy_2_PBMC_05_1_Healthy", "Healthy_2_PBMC_05_2_Healthy", 
+                    "Healthy_2_PBMC_05_3_Healthy", "Healthy_2_PBMC_05_4_Healthy",
+                    "Healthy_4_PBMC_01_3_Healthy", 
+                    "Healthy_4_PBMC_01_4_Healthy", 
+                    "Healthy_4_PBMC_02_1_Healthy", "Healthy_4_PBMC_02_2_Healthy", "Healthy_4_PBMC_02_3_Healthy", 
+                    "Healthy_4_PBMC_02_4_Healthy", "Healthy_4_PBMC_03_1_Healthy", "Healthy_4_PBMC_03_2_Healthy", 
+                    "Healthy_4_PBMC_03_3_Healthy", "Healthy_4_PBMC_03_4_Healthy", "Healthy_4_PBMC_04_1_Healthy", 
+                    "Healthy_4_PBMC_04_2_Healthy", "Healthy_4_PBMC_04_3_Healthy", "Healthy_4_PBMC_04_4_Healthy", 
+                    "Healthy_4_PBMC_05_1_Healthy", "Healthy_4_PBMC_05_2_Healthy", "Healthy_4_PBMC_05_3_Healthy", 
+                    "Healthy_4_PBMC_05_4_Healthy",
+                    "Healthy_5_PBMC_01_3_Healthy", "Healthy_5_PBMC_01_4_Healthy", 
+                    "Healthy_5_PBMC_02_1_Healthy", "Healthy_5_PBMC_02_2_Healthy", 
+                    "Healthy_5_PBMC_02_3_Healthy", "Healthy_5_PBMC_02_4_Healthy", 
+                    "Healthy_5_PBMC_03_1_Healthy", "Healthy_5_PBMC_03_2_Healthy", 
+                    "Healthy_5_PBMC_03_3_Healthy", "Healthy_5_PBMC_03_4_Healthy", 
+                    "Healthy_5_PBMC_04_1_Healthy", "Healthy_5_PBMC_04_2_Healthy", 
+                    "Healthy_5_PBMC_04_3_Healthy", "Healthy_5_PBMC_04_4_Healthy", 
+                    "Healthy_5_PBMC_05_1_Healthy", "Healthy_5_PBMC_05_2_Healthy", 
+                    "Healthy_5_PBMC_05_3_Healthy", "Healthy_5_PBMC_05_4_Healthy"
+)
+
+# Subset the Seurat object
+merged_seurat <- subset(merged_seurat, idents = idents_to_keep)
+
+# Check the identities in the filtered object
+print("Filtered Idents:")
+table(Idents(merged_seurat))
+
+# Check the identities in merged_seurat
+#print(unique(Idents(merged_seurat)))
+# Check the combined ID field
+#print("Combined IDs:")
+#print(merged_seurat$combined_id)
+
+print("Seurat Object Subsetted Successfully")
+
+
+# Step 5: Define the Comparisons for DEseq analysis from subsetted object
+comparisons <- list(
+  AS_Group_vs_Healthy = list(
+    ident.1 = c("AS_Group_0_27B", "AS_Group_0_AS01PB", "AS_Group_0_AS02PB", "AS_Group_0_PBMC_02_1_AXI", 
+                "AS_Group_0_PBMC_02_2_AXI", "AS_Group_0_PBMC_02_3_AXI", "AS_Group_0_PBMC_02_4_AXI", 
+                "AS_Group_0_PBMC_03_1_AXI", "AS_Group_0_PBMC_03_2_AXI", "AS_Group_0_PBMC_03_3_AXI", 
+                "AS_Group_0_PBMC_03_4_AXI", "AS_Group_0_PBMC_04_1_AXI", "AS_Group_0_PBMC_04_2_AXI", 
+                "AS_Group_0_PBMC_04_3_AXI", "AS_Group_0_PBMC_04_4_AXI", "AS_Group_0_PBMC_05_1_AXI", 
+                "AS_Group_0_PBMC_05_2_AXI", "AS_Group_0_PBMC_05_3_AXI", "AS_Group_0_PBMC_05_4_AXI", 
+                "AS_Group_0_PBMC_07_1", "AS_Group_0_PBMC_07_2", "AS_Group_0_PBMC_07_3", "AS_Group_0_PBMC_07_4",
+                "AS_Group_1_AS01PB", "AS_Group_1_AS02PB", "AS_Group_1_PBMC_02_1_AXI", 
+                "AS_Group_1_PBMC_02_2_AXI", "AS_Group_1_PBMC_02_3_AXI", "AS_Group_1_PBMC_02_4_AXI", 
+                "AS_Group_1_PBMC_03_1_AXI", "AS_Group_1_PBMC_03_2_AXI", "AS_Group_1_PBMC_03_3_AXI", 
+                "AS_Group_1_PBMC_03_4_AXI", "AS_Group_1_PBMC_04_1_AXI", "AS_Group_1_PBMC_04_2_AXI", 
+                "AS_Group_1_PBMC_04_3_AXI", "AS_Group_1_PBMC_04_4_AXI", "AS_Group_1_PBMC_05_1_AXI", 
+                "AS_Group_1_PBMC_05_2_AXI", "AS_Group_1_PBMC_05_3_AXI", "AS_Group_1_PBMC_05_4_AXI", 
+                "AS_Group_1_PBMC_07_1", "AS_Group_1_PBMC_07_2", "AS_Group_1_PBMC_07_3", 
+                "AS_Group_1_PBMC_07_4",
+                "AS_Group_2_AS01PB", "AS_Group_2_AS02PB", "AS_Group_2_PBMC_02_1_AXI", 
+                "AS_Group_2_PBMC_02_2_AXI", "AS_Group_2_PBMC_02_3_AXI", "AS_Group_2_PBMC_02_4_AXI", 
+                "AS_Group_2_PBMC_03_1_AXI", "AS_Group_2_PBMC_03_2_AXI", "AS_Group_2_PBMC_03_3_AXI", 
+                "AS_Group_2_PBMC_03_4_AXI", "AS_Group_2_PBMC_04_1_AXI", "AS_Group_2_PBMC_04_2_AXI", 
+                "AS_Group_2_PBMC_04_3_AXI", "AS_Group_2_PBMC_04_4_AXI", "AS_Group_2_PBMC_05_1_AXI", 
+                "AS_Group_2_PBMC_05_2_AXI", "AS_Group_2_PBMC_05_3_AXI", "AS_Group_2_PBMC_05_4_AXI", 
+                "AS_Group_2_PBMC_07_1", "AS_Group_2_PBMC_07_2", "AS_Group_2_PBMC_07_3", 
+                "AS_Group_2_PBMC_07_4",
+                "AS_Group_4_AS01PB", "AS_Group_4_AS02PB", 
+                "AS_Group_4_PBMC_02_1_AXI", "AS_Group_4_PBMC_02_2_AXI", 
+                "AS_Group_4_PBMC_02_3_AXI", "AS_Group_4_PBMC_02_4_AXI", 
+                "AS_Group_4_PBMC_03_1_AXI", "AS_Group_4_PBMC_03_2_AXI", 
+                "AS_Group_4_PBMC_03_3_AXI", "AS_Group_4_PBMC_03_4_AXI", 
+                "AS_Group_4_PBMC_04_1_AXI", "AS_Group_4_PBMC_04_2_AXI", 
+                "AS_Group_4_PBMC_04_3_AXI", "AS_Group_4_PBMC_04_4_AXI", 
+                "AS_Group_4_PBMC_05_1_AXI", "AS_Group_4_PBMC_05_2_AXI", 
+                "AS_Group_4_PBMC_05_3_AXI", "AS_Group_4_PBMC_05_4_AXI", 
+                "AS_Group_4_PBMC_07_1", "AS_Group_4_PBMC_07_2", 
+                "AS_Group_4_PBMC_07_3", "AS_Group_4_PBMC_07_4",
+                "AS_Group_5_AS01PB", 
+                "AS_Group_5_AS02PB", "AS_Group_5_PBMC_02_1_AXI", 
+                "AS_Group_5_PBMC_02_2_AXI", "AS_Group_5_PBMC_02_3_AXI", 
+                "AS_Group_5_PBMC_02_4_AXI", "AS_Group_5_PBMC_03_1_AXI", 
+                "AS_Group_5_PBMC_03_2_AXI", "AS_Group_5_PBMC_03_3_AXI", 
+                "AS_Group_5_PBMC_03_4_AXI", "AS_Group_5_PBMC_04_1_AXI", 
+                "AS_Group_5_PBMC_04_2_AXI", "AS_Group_5_PBMC_04_3_AXI", 
+                "AS_Group_5_PBMC_04_4_AXI", "AS_Group_5_PBMC_05_1_AXI", 
+                "AS_Group_5_PBMC_05_2_AXI", "AS_Group_5_PBMC_05_3_AXI", 
+                "AS_Group_5_PBMC_05_4_AXI", "AS_Group_5_PBMC_07_1", 
+                "AS_Group_5_PBMC_07_2", "AS_Group_5_PBMC_07_3"),  
+    
+    
+    ident.2 = c("Healthy_0_21B", "Healthy_0_PBMC_01_3_Healthy", "Healthy_0_PBMC_01_4_Healthy", 
+                "Healthy_0_PBMC_02_1_Healthy", "Healthy_0_PBMC_02_2_Healthy", "Healthy_0_PBMC_02_3_Healthy", 
+                "Healthy_0_PBMC_02_4_Healthy", "Healthy_0_PBMC_03_1_Healthy", "Healthy_0_PBMC_03_2_Healthy", 
+                "Healthy_0_PBMC_03_3_Healthy", "Healthy_0_PBMC_03_4_Healthy", "Healthy_0_PBMC_04_1_Healthy", 
+                "Healthy_0_PBMC_04_2_Healthy", "Healthy_0_PBMC_04_3_Healthy", "Healthy_0_PBMC_04_4_Healthy", 
+                "Healthy_0_PBMC_05_1_Healthy", "Healthy_0_PBMC_05_2_Healthy", "Healthy_0_PBMC_05_3_Healthy", 
+                "Healthy_0_PBMC_05_4_Healthy",
+                "Healthy_1_PBMC_01_3_Healthy", "Healthy_1_PBMC_01_4_Healthy", 
+                "Healthy_1_PBMC_02_1_Healthy", "Healthy_1_PBMC_02_2_Healthy", 
+                "Healthy_1_PBMC_02_3_Healthy", "Healthy_1_PBMC_02_4_Healthy", 
+                "Healthy_1_PBMC_03_1_Healthy", "Healthy_1_PBMC_03_2_Healthy", 
+                "Healthy_1_PBMC_03_3_Healthy", "Healthy_1_PBMC_03_4_Healthy", 
+                "Healthy_1_PBMC_04_1_Healthy", "Healthy_1_PBMC_04_2_Healthy", 
+                "Healthy_1_PBMC_04_3_Healthy", "Healthy_1_PBMC_04_4_Healthy", 
+                "Healthy_1_PBMC_05_1_Healthy", "Healthy_1_PBMC_05_2_Healthy", 
+                "Healthy_1_PBMC_05_3_Healthy", "Healthy_1_PBMC_05_4_Healthy",
+                "Healthy_2_PBMC_01_3_Healthy", "Healthy_2_PBMC_01_4_Healthy", 
+                "Healthy_2_PBMC_02_1_Healthy", "Healthy_2_PBMC_02_2_Healthy", 
+                "Healthy_2_PBMC_02_3_Healthy", "Healthy_2_PBMC_02_4_Healthy", 
+                "Healthy_2_PBMC_03_1_Healthy", "Healthy_2_PBMC_03_2_Healthy", 
+                "Healthy_2_PBMC_03_3_Healthy", "Healthy_2_PBMC_03_4_Healthy", 
+                "Healthy_2_PBMC_04_1_Healthy", "Healthy_2_PBMC_04_2_Healthy", 
+                "Healthy_2_PBMC_04_3_Healthy", "Healthy_2_PBMC_04_4_Healthy", 
+                "Healthy_2_PBMC_05_1_Healthy", "Healthy_2_PBMC_05_2_Healthy", 
+                "Healthy_2_PBMC_05_3_Healthy", "Healthy_2_PBMC_05_4_Healthy",
+                "Healthy_4_PBMC_01_3_Healthy", 
+                "Healthy_4_PBMC_01_4_Healthy", 
+                "Healthy_4_PBMC_02_1_Healthy", "Healthy_4_PBMC_02_2_Healthy", "Healthy_4_PBMC_02_3_Healthy", 
+                "Healthy_4_PBMC_02_4_Healthy", "Healthy_4_PBMC_03_1_Healthy", "Healthy_4_PBMC_03_2_Healthy", 
+                "Healthy_4_PBMC_03_3_Healthy", "Healthy_4_PBMC_03_4_Healthy", "Healthy_4_PBMC_04_1_Healthy", 
+                "Healthy_4_PBMC_04_2_Healthy", "Healthy_4_PBMC_04_3_Healthy", "Healthy_4_PBMC_04_4_Healthy", 
+                "Healthy_4_PBMC_05_1_Healthy", "Healthy_4_PBMC_05_2_Healthy", "Healthy_4_PBMC_05_3_Healthy", 
+                "Healthy_4_PBMC_05_4_Healthy",
+                "Healthy_5_PBMC_01_3_Healthy", "Healthy_5_PBMC_01_4_Healthy", 
+                "Healthy_5_PBMC_02_1_Healthy", "Healthy_5_PBMC_02_2_Healthy", 
+                "Healthy_5_PBMC_02_3_Healthy", "Healthy_5_PBMC_02_4_Healthy", 
+                "Healthy_5_PBMC_03_1_Healthy", "Healthy_5_PBMC_03_2_Healthy", 
+                "Healthy_5_PBMC_03_3_Healthy", "Healthy_5_PBMC_03_4_Healthy", 
+                "Healthy_5_PBMC_04_1_Healthy", "Healthy_5_PBMC_04_2_Healthy", 
+                "Healthy_5_PBMC_04_3_Healthy", "Healthy_5_PBMC_04_4_Healthy", 
+                "Healthy_5_PBMC_05_1_Healthy", "Healthy_5_PBMC_05_2_Healthy", 
+                "Healthy_5_PBMC_05_3_Healthy", "Healthy_5_PBMC_05_4_Healthy")
+  ),
+  
+  AS_Group_Naive_vs_Healthy_Naive = list(
+    ident.1 = c("AS_Group_0_27B", "AS_Group_0_AS01PB", "AS_Group_0_AS02PB", "AS_Group_0_PBMC_02_1_AXI", 
+                "AS_Group_0_PBMC_02_2_AXI", "AS_Group_0_PBMC_02_3_AXI", "AS_Group_0_PBMC_02_4_AXI", 
+                "AS_Group_0_PBMC_03_1_AXI", "AS_Group_0_PBMC_03_2_AXI", "AS_Group_0_PBMC_03_3_AXI", 
+                "AS_Group_0_PBMC_03_4_AXI", "AS_Group_0_PBMC_04_1_AXI", "AS_Group_0_PBMC_04_2_AXI", 
+                "AS_Group_0_PBMC_04_3_AXI", "AS_Group_0_PBMC_04_4_AXI", "AS_Group_0_PBMC_05_1_AXI", 
+                "AS_Group_0_PBMC_05_2_AXI", "AS_Group_0_PBMC_05_3_AXI", "AS_Group_0_PBMC_05_4_AXI", 
+                "AS_Group_0_PBMC_07_1", "AS_Group_0_PBMC_07_2", "AS_Group_0_PBMC_07_3", "AS_Group_0_PBMC_07_4"),  
+    
+    ident.2 = c("Healthy_0_21B", "Healthy_0_PBMC_01_3_Healthy", "Healthy_0_PBMC_01_4_Healthy", 
+                "Healthy_0_PBMC_02_1_Healthy", "Healthy_0_PBMC_02_2_Healthy", "Healthy_0_PBMC_02_3_Healthy", 
+                "Healthy_0_PBMC_02_4_Healthy", "Healthy_0_PBMC_03_1_Healthy", "Healthy_0_PBMC_03_2_Healthy", 
+                "Healthy_0_PBMC_03_3_Healthy", "Healthy_0_PBMC_03_4_Healthy", "Healthy_0_PBMC_04_1_Healthy", 
+                "Healthy_0_PBMC_04_2_Healthy", "Healthy_0_PBMC_04_3_Healthy", "Healthy_0_PBMC_04_4_Healthy", 
+                "Healthy_0_PBMC_05_1_Healthy", "Healthy_0_PBMC_05_2_Healthy", "Healthy_0_PBMC_05_3_Healthy", 
+                "Healthy_0_PBMC_05_4_Healthy")
+  ),
+  
+  AS_Group_CD14Mono_vs_Healthy_CD14Mono = list(
+    ident.1 = c("AS_Group_1_AS01PB", "AS_Group_1_AS02PB", "AS_Group_1_PBMC_02_1_AXI", 
+                "AS_Group_1_PBMC_02_2_AXI", "AS_Group_1_PBMC_02_3_AXI", "AS_Group_1_PBMC_02_4_AXI", 
+                "AS_Group_1_PBMC_03_1_AXI", "AS_Group_1_PBMC_03_2_AXI", "AS_Group_1_PBMC_03_3_AXI", 
+                "AS_Group_1_PBMC_03_4_AXI", "AS_Group_1_PBMC_04_1_AXI", "AS_Group_1_PBMC_04_2_AXI", 
+                "AS_Group_1_PBMC_04_3_AXI", "AS_Group_1_PBMC_04_4_AXI", "AS_Group_1_PBMC_05_1_AXI", 
+                "AS_Group_1_PBMC_05_2_AXI", "AS_Group_1_PBMC_05_3_AXI", "AS_Group_1_PBMC_05_4_AXI", 
+                "AS_Group_1_PBMC_07_1", "AS_Group_1_PBMC_07_2", "AS_Group_1_PBMC_07_3", 
+                "AS_Group_1_PBMC_07_4"),
+    
+    ident.2 = c("Healthy_1_PBMC_01_3_Healthy", "Healthy_1_PBMC_01_4_Healthy", 
+                "Healthy_1_PBMC_02_1_Healthy", "Healthy_1_PBMC_02_2_Healthy", 
+                "Healthy_1_PBMC_02_3_Healthy", "Healthy_1_PBMC_02_4_Healthy", 
+                "Healthy_1_PBMC_03_1_Healthy", "Healthy_1_PBMC_03_2_Healthy", 
+                "Healthy_1_PBMC_03_3_Healthy", "Healthy_1_PBMC_03_4_Healthy", 
+                "Healthy_1_PBMC_04_1_Healthy", "Healthy_1_PBMC_04_2_Healthy", 
+                "Healthy_1_PBMC_04_3_Healthy", "Healthy_1_PBMC_04_4_Healthy", 
+                "Healthy_1_PBMC_05_1_Healthy", "Healthy_1_PBMC_05_2_Healthy", 
+                "Healthy_1_PBMC_05_3_Healthy", "Healthy_1_PBMC_05_4_Healthy")
+  ),
+  
+  AS_Group_MemoryCD4_vs_Healthy_MemoryCD4 = list(
+    ident.1 = c("AS_Group_2_AS01PB", "AS_Group_2_AS02PB", "AS_Group_2_PBMC_02_1_AXI", 
+                "AS_Group_2_PBMC_02_2_AXI", "AS_Group_2_PBMC_02_3_AXI", "AS_Group_2_PBMC_02_4_AXI", 
+                "AS_Group_2_PBMC_03_1_AXI", "AS_Group_2_PBMC_03_2_AXI", "AS_Group_2_PBMC_03_3_AXI", 
+                "AS_Group_2_PBMC_03_4_AXI", "AS_Group_2_PBMC_04_1_AXI", "AS_Group_2_PBMC_04_2_AXI", 
+                "AS_Group_2_PBMC_04_3_AXI", "AS_Group_2_PBMC_04_4_AXI", "AS_Group_2_PBMC_05_1_AXI", 
+                "AS_Group_2_PBMC_05_2_AXI", "AS_Group_2_PBMC_05_3_AXI", "AS_Group_2_PBMC_05_4_AXI", 
+                "AS_Group_2_PBMC_07_1", "AS_Group_2_PBMC_07_2", "AS_Group_2_PBMC_07_3", 
+                "AS_Group_2_PBMC_07_4"),  
+    ident.2 = c("Healthy_2_PBMC_01_3_Healthy", "Healthy_2_PBMC_01_4_Healthy", 
+                "Healthy_2_PBMC_02_1_Healthy", "Healthy_2_PBMC_02_2_Healthy", 
+                "Healthy_2_PBMC_02_3_Healthy", "Healthy_2_PBMC_02_4_Healthy", 
+                "Healthy_2_PBMC_03_1_Healthy", "Healthy_2_PBMC_03_2_Healthy", 
+                "Healthy_2_PBMC_03_3_Healthy", "Healthy_2_PBMC_03_4_Healthy", 
+                "Healthy_2_PBMC_04_1_Healthy", "Healthy_2_PBMC_04_2_Healthy", 
+                "Healthy_2_PBMC_04_3_Healthy", "Healthy_2_PBMC_04_4_Healthy", 
+                "Healthy_2_PBMC_05_1_Healthy", "Healthy_2_PBMC_05_2_Healthy", 
+                "Healthy_2_PBMC_05_3_Healthy", "Healthy_2_PBMC_05_4_Healthy")
+  ),
+  
+  AS_Group_CD8T_vs_Healthy_CD8T = list(
+    ident.1 = c("AS_Group_4_AS01PB", "AS_Group_4_AS02PB", 
+                "AS_Group_4_PBMC_02_1_AXI", "AS_Group_4_PBMC_02_2_AXI", 
+                "AS_Group_4_PBMC_02_3_AXI", "AS_Group_4_PBMC_02_4_AXI", 
+                "AS_Group_4_PBMC_03_1_AXI", "AS_Group_4_PBMC_03_2_AXI", 
+                "AS_Group_4_PBMC_03_3_AXI", "AS_Group_4_PBMC_03_4_AXI", 
+                "AS_Group_4_PBMC_04_1_AXI", "AS_Group_4_PBMC_04_2_AXI", 
+                "AS_Group_4_PBMC_04_3_AXI", "AS_Group_4_PBMC_04_4_AXI", 
+                "AS_Group_4_PBMC_05_1_AXI", "AS_Group_4_PBMC_05_2_AXI", 
+                "AS_Group_4_PBMC_05_3_AXI", "AS_Group_4_PBMC_05_4_AXI", 
+                "AS_Group_4_PBMC_07_1", "AS_Group_4_PBMC_07_2", 
+                "AS_Group_4_PBMC_07_3", "AS_Group_4_PBMC_07_4"),  
+    
+    ident.2 = c("Healthy_4_PBMC_01_3_Healthy", "Healthy_4_PBMC_01_4_Healthy", 
+                "Healthy_4_PBMC_02_1_Healthy", "Healthy_4_PBMC_02_2_Healthy", "Healthy_4_PBMC_02_3_Healthy", 
+                "Healthy_4_PBMC_02_4_Healthy", "Healthy_4_PBMC_03_1_Healthy", "Healthy_4_PBMC_03_2_Healthy", 
+                "Healthy_4_PBMC_03_3_Healthy", "Healthy_4_PBMC_03_4_Healthy", "Healthy_4_PBMC_04_1_Healthy", 
+                "Healthy_4_PBMC_04_2_Healthy", "Healthy_4_PBMC_04_3_Healthy", "Healthy_4_PBMC_04_4_Healthy", 
+                "Healthy_4_PBMC_05_1_Healthy", "Healthy_4_PBMC_05_2_Healthy", "Healthy_4_PBMC_05_3_Healthy", 
+                "Healthy_4_PBMC_05_4_Healthy")
+  ),
+  
+  AS_Group_FCGR3AMono_vs_Healthy_FCGR3AMono = list(
+    ident.1 = c("AS_Group_5_AS01PB", 
+                "AS_Group_5_AS02PB", "AS_Group_5_PBMC_02_1_AXI", 
+                "AS_Group_5_PBMC_02_2_AXI", "AS_Group_5_PBMC_02_3_AXI", 
+                "AS_Group_5_PBMC_02_4_AXI", "AS_Group_5_PBMC_03_1_AXI", 
+                "AS_Group_5_PBMC_03_2_AXI", "AS_Group_5_PBMC_03_3_AXI", 
+                "AS_Group_5_PBMC_03_4_AXI", "AS_Group_5_PBMC_04_1_AXI", 
+                "AS_Group_5_PBMC_04_2_AXI", "AS_Group_5_PBMC_04_3_AXI", 
+                "AS_Group_5_PBMC_04_4_AXI", "AS_Group_5_PBMC_05_1_AXI", 
+                "AS_Group_5_PBMC_05_2_AXI", "AS_Group_5_PBMC_05_3_AXI", 
+                "AS_Group_5_PBMC_05_4_AXI", "AS_Group_5_PBMC_07_1", 
+                "AS_Group_5_PBMC_07_2", "AS_Group_5_PBMC_07_3", 
+                "AS_Group_5_PBMC_07_4"),  
+    
+    ident.2 = c("Healthy_5_PBMC_01_3_Healthy", "Healthy_5_PBMC_01_4_Healthy", 
+                "Healthy_5_PBMC_02_1_Healthy", "Healthy_5_PBMC_02_2_Healthy", 
+                "Healthy_5_PBMC_02_3_Healthy", "Healthy_5_PBMC_02_4_Healthy", 
+                "Healthy_5_PBMC_03_1_Healthy", "Healthy_5_PBMC_03_2_Healthy", 
+                "Healthy_5_PBMC_03_3_Healthy", "Healthy_5_PBMC_03_4_Healthy", 
+                "Healthy_5_PBMC_04_1_Healthy", "Healthy_5_PBMC_04_2_Healthy", 
+                "Healthy_5_PBMC_04_3_Healthy", "Healthy_5_PBMC_04_4_Healthy", 
+                "Healthy_5_PBMC_05_1_Healthy", "Healthy_5_PBMC_05_2_Healthy", 
+                "Healthy_5_PBMC_05_3_Healthy", "Healthy_5_PBMC_05_4_Healthy")
+  )
+)
+print("Clusters Defined")
+
+print("CHECK SUBSETTED IDENTS")
+levels(merged_seurat)
+table(Idents(merged_seurat))
+#colnames(merged_seurat)
+
+
+
+# Check available assays in the Seurat object
+names(merged_seurat@assays)
+
+print("Clusters Defined")
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+
+# Step 1: Extract and Log Normalize the Raw Counts Matrix
+counts_matrix <- GetAssayData(merged_seurat, assay = "RNA", layer = "counts")
+
+# Ensure it's in sparse matrix format
+counts_matrix <- as(counts_matrix, "dgCMatrix")
+
+# Filter out genes with all zero counts before conversion
+initial_features <- nrow(counts_matrix)
+counts_matrix <- counts_matrix[rowSums(counts_matrix > 0) > 1, ]
+filtered_features <- nrow(counts_matrix)
+
+print(paste("Initial features:", initial_features))
+print(paste("Filtered features:", filtered_features))
+
+# Update the Seurat object with the filtered features
+merged_seurat <- subset(merged_seurat, features = rownames(counts_matrix))
+
+print("CHECK FILTERED IDENTS")
+levels(merged_seurat)
+table(Idents(merged_seurat))
+
+print("Filtering Complete")
+
+# Convert to integer mode
+#counts_matrix@x <- as.numeric(counts_matrix@x) # Sparse conversion keeps memory low
+
+# Step 2: Create Seurat Object and Normalize Data
+#merged_seurat <- CreateSeuratObject(counts = counts_matrix, meta.data = merged_seurat@meta.data)
+
+# Normalize data using log normalization
+merged_seurat <- NormalizeData(merged_seurat, normalization.method = "LogNormalize", scale.factor = 10000)
+
+dim(merged_seurat)
+head(merged_seurat)
+print("CHECK NORMALIZED IDENTS")
+levels(merged_seurat)
+table(Idents(merged_seurat))
+#colnames(merged_seurat)
+
+print("Normalization Complete")
+
+# Step 3: Perform Wilcoxon Test for Differential Expression Analysis
+de_results_list <- lapply(names(comparisons), function(comp_name) {
+  comp <- comparisons[[comp_name]]
+  
+  # Perform Wilcoxon test using log-normalized data
+  de_results <- FindMarkers(
+    object = merged_seurat,
+    ident.1 = comp$ident.1,
+    ident.2 = comp$ident.2,
+    test.use = "wilcox",
+    slot = "data"  # Use log-normalized values
+  )
+  
+  de_results$gene <- rownames(de_results)
+  de_results$comparison <- comp_name
+  # Save each DE result as an .rds file
+  saveRDS(de_results, paste0("DESeq2_results_", comp_name, ".rds"))
+  return(de_results)
+  
+})
+
+# Combine results into a single data frame
+all_de_results <- do.call(rbind, de_results_list)
+
+# Step 4: Annotate Data for Volcano Plots
+all_de_results <- all_de_results %>%
+  mutate(
+    significance = case_when(
+      p_val_adj < 0.05 & abs(avg_log2FC) > 1 ~ "Significant",
+      TRUE ~ "Not Significant"
+    )
+  )
+
+# Step 5: Generate Volcano Plots for Each Comparison
+volcano_plots <- lapply(unique(all_de_results$comparison), function(comp_name) {
+  comp_data <- all_de_results %>% filter(comparison == comp_name)
+  
+  # Identify top 10 significant genes based on p-value and log2FC
+  top_genes <- comp_data %>%
+    filter(significance == "Significant") %>%
+    arrange(p_val_adj) %>%
+    top_n(10, wt = -log10(p_val_adj)) %>%
+    pull(gene)
+  
+  p <- ggplot(comp_data, aes(x = avg_log2FC, y = -log10(p_val_adj), color = significance)) +
+    geom_point(alpha = 0.8, size = 2) +
+    scale_color_manual(values = c("Significant" = "red", "Not Significant" = "gray")) +
+    theme_minimal() +
+    labs(
+      title = paste("Volcano Plot:", comp_name),
+      x = "Log2 Fold Change",
+      y = "-Log10 Adjusted P-Value"
+    ) +
+    # Add labels for the top 10 significant genes
+    geom_text_repel(
+      data = comp_data %>% filter(gene %in% top_genes),
+      aes(label = gene),
+      box.padding = 0.35, 
+      point.padding = 0.5,
+      max.overlaps = 10
+    )
+  
+  # Save the plot
+  ggsave(paste0("volcano_plot_", comp_name, ".pdf"), plot = p, width = 8, height = 6)
+  
+  return(p)
+})
+
+print("Non-Pseudobulk Wilcoxon analysis and volcano plots complete.")
+```
+
+
 # Results
 
-This section contains the results for this project including volcano plots, gene lists, and Enrichr output.
+This section contains the results from the Wilcoxon rank sum test with no pseudobulking including volcano plots, gene lists, and Enrichr output. For the volcano plots, genes up-regulated in the disease group are red and genes down regulated in the disease group are blue. Genes with an adjusted p-value of zero are not included in the volcano plots but can be found in the tables below.
 
 ## Volcano Plots
 
 ### Volcano Plots For Naive CD4 Cells
 
-![Naive Disease vs Healthy](Alpine_Volcano_Plots/volcano_plot_AS_Group_Naive_vs_Healthy_Naive.png)
+![Naive Disease vs Healthy](Alpine_Volcano_Plots/Naive.png)
 
 
 ### Volcano Plots For Memory CD4 Cells
 
 
-![Memory CD4 Disease vs Healthy](Alpine_Volcano_Plots/volcano_plot_AS_Group_MemoryCD4_vs_Healthy_MemoryCD4.png)
+![Memory CD4 Disease vs Healthy](Alpine_Volcano_Plots/MemoryCD4.png)
 
 ### Volcano Plots For CD8 T Cells
 
 
-![CD8 T Disease vs Healthy](Alpine_Volcano_Plots/volcano_plot_AS_Group_CD8T_vs_Healthy_CD8T.png)
+![CD8 T Disease vs Healthy](Alpine_Volcano_Plots/CD8T.png)
 
 
 ### Volcano Plots For FCGR3AMonocyte Cells
 
 
-![FCGR3A Monocyte Disease vs Healthy](Alpine_Volcano_Plots/volcano_plot_AS_Group_FCGR3AMono_vs_Healthy_FCGR3AMono.png)
+![FCGR3A Monocyte Disease vs Healthy](Alpine_Volcano_Plots/FCGR3A_Mono.png)
 
 
 ### Volcano Plots For CD14Monocyte Cells
 
-![CD14 Monocyte Disease vs Healthy](Alpine_Volcano_Plots/volcano_plot_AS_Group_CD14Mono_vs_Healthy_CD14Mono.png)
+![CD14 Monocyte Disease vs Healthy](Alpine_Volcano_Plots/CD14_Mono.png)
 
 ### Volcano Plots For Healthy vs Control All Cells
 
-![Healthy vs Control All Cells](Alpine_Volcano_Plots/AS_VS_Healthy_All.png)
+![Healthy vs Control All Cells](Alpine_Volcano_Plots/AS_Group_VS_Healthy.png)
 
 
 ## Gene Lists
 
-### Gene Lists For Naive CD4 Cells
-```{r}
-data <- read.csv("Gene_Lists/DESeq2_results_AS_Group_Naive.csv")
-knitr::kable(head(data, 10))
-```
-[Download CSV](Gene_Lists/DESeq2_results_AS_Group_Naive.csv)
-
-
-
 ### Gene Lists For Memory CD4 Cells
+
+#### Upregulated
+
 ```{r}
-data <- read.csv("Gene_Lists/DESeq2_results_AS_Group_MemoryCD4.csv")
+data <- read.csv("Gene_Lists/CD4_Gene_Lists/Upregulated/CD4_upregulated.csv")
 knitr::kable(head(data, 10))
 ```
-[Download CSV](Gene_Lists/DESeq2_results_AS_Group_MemoryCD4.csv)
+[Download CSV](Gene_Lists/CD4_Gene_Lists/Upregulated/CD4_upregulated.csv)
+
+
+#### Downregulated
+
+```{r}
+data <- read.csv("Gene_Lists/CD4_Gene_Lists/Downregulated/CD4_downregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/CD4_Gene_Lists/Downregulated/CD4_downregulated.csv)
 
 ### Gene Lists For CD8 T Cells
 
-```{r}
-data <- read.csv("Gene_Lists/DESeq2_results_AS_Group_CD8T.csv")
-knitr::kable(head(data, 10))
-```
-[Download CSV](Gene_Lists/DESeq2_results_AS_Group_CD8T.csv)
-
-### Gene Lists for CD14 Monocytes
+#### Upregulated
 
 ```{r}
-data <- read.csv("Gene_Lists/DESeq2_results_AS_Group_CD14Mono.csv")
+data <- read.csv("Gene_Lists/CD8_Gene_Lists/Upregulated/CD8_upregulated.csv")
 knitr::kable(head(data, 10))
 ```
-[Download CSV](Gene_Lists/DESeq2_results_AS_Group_CD14Mono.csv)
+[Download CSV](Gene_Lists/CD8_Gene_Lists/Upregulated/CD8_upregulated.csv)
 
-### Gene Lists for FCGR3A Monocytes
+
+#### Downregulated
 
 ```{r}
-data <- read.csv("Gene_Lists/DESeq2_results_AS_Group_FCGR3AMono.csv")
+data <- read.csv("Gene_Lists/CD8_Gene_Lists/Downregulated/CD8_downregulated.csv")
 knitr::kable(head(data, 10))
 ```
-[Download CSV](Gene_Lists/DESeq2_results_AS_Group_FCGR3AMono.csv)
+[Download CSV](Gene_Lists/CD8_Gene_Lists/Downregulated/CD8_downregulated.csv)
 
-### Gene Lists for AS vs Healthy
+### Gene Lists For Naive Cells
+
+#### Upregulated
 
 ```{r}
-data <- read.csv("Gene_Lists/DESeq2_results_AS_Group_AS_Group_vs_Healthy.csv")
+data <- read.csv("Gene_Lists/Naive_Gene_Lists/Upregulated/Naive_upregulated.csv")
 knitr::kable(head(data, 10))
 ```
-[Download CSV](Gene_Lists/DESeq2_results_AS_Group_AS_Group_vs_Healthy.csv)
+[Download CSV](Gene_Lists/Naive_Gene_Lists/Upregulated/Naive_upregulated.csv)
 
-### Gene Lists for All vs Healthy
+
+#### Downregulated
 
 ```{r}
-data <- read.csv("Gene_Lists/Disease_Vs_Healthy_All_DEGs.csv")
+data <- read.csv("Gene_Lists/Naive_Gene_Lists/Downregulated/Naive_downregulated.csv")
 knitr::kable(head(data, 10))
 ```
-[Download CSV](Gene_Lists/Disease_Vs_Healthy_All_DEGs.csv)
+[Download CSV](Gene_Lists/Naive_Gene_Lists/Downregulated/Naive_downregulated.csv)
+
+### Gene Lists For CD14Mono Cells
+
+#### Upregulated
+
+```{r}
+data <- read.csv("Gene_Lists/CD14Mono/Upregulated/CD14_Mono_upregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/CD14Mono_Gene_Lists/Upregulated/CD14Mono_upregulated.csv)
+
+
+#### Downregulated
+
+```{r}
+data <- read.csv("Gene_Lists/CD14Mono/Downregulated/CD14_Mono_downregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/CD14Mono_Gene_Lists/Downregulated/CD14Mono_downregulated.csv)
+
+
+### Gene Lists For FCGR3AMono Cells
+
+#### Upregulated
+
+```{r}
+data <- read.csv("Gene_Lists/FCGR3AMono_Gene_Lists/Upregulated/FCGR3AMono_upregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/FCGR3AMono_Gene_Lists/Upregulated/FCGR3AMono_upregulated.csv)
+
+
+#### Downregulated
+
+```{r}
+data <- read.csv("Gene_Lists/FCGR3AMono_Gene_Lists/Downregulated/FCGR3AMono_downregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/FCGR3AMono_Gene_Lists/Downregulated/FCGR3AMono_downregulated.csv)
+
+### Gene Lists For AS_VS_Healthy Cells
+
+#### Upregulated
+
+```{r}
+data <- read.csv("Gene_Lists/AS_VS_Healthy_Gene_Lists/Upregulated/AS_VS_Healthy_upregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/AS_VS_Healthy_Gene_Lists/Upregulated/AS_VS_Healthy_upregulated.csv)
+
+
+#### Downregulated
+
+```{r}
+data <- read.csv("Gene_Lists/AS_VS_Healthy_Gene_Lists/Downregulated/AS_VS_Healthy_downregulated.csv")
+knitr::kable(head(data, 10))
+```
+[Download CSV](Gene_Lists/AS_VS_Healthy_Gene_Lists/Downregulated/AS_VS_Healthy_downregulated.csv)
+
 
 ## Enrichr Results
 
+### Pathways
+
+![Upregulated Pathways](Enrichr_Results/Upregulated_pathways.png)
+
+![Downregulated Pathways](Enrichr_Results/Downregulated_pathways.png)
+
+### Ontologies
+
+![Upregulated Ontologies](Enrichr_Results/Upregulated_Ontologies.png)
+
+![Downregulated Ontologies](Enrichr_Results/Downregulated_Ontologies.png)
+
+
 # Summary and Next Steps
+This project successfully integrated scRNAseq data from AS samples and healthy controls from multiple sources. The fastq files were mapped using starSolo and generated count matrix, barcode, and gene list files. All samples had these three files, which were used to create a Seurat object for each sample, which were merged into one large object. The combined Seurat object was batch corrected with Harmony and the diseased samples were grouped under one label. This cleaned object was used to create UMAPs to better understand the structure of the data and identify which clusters represent the cell types of interest. A DESeq2 pipeline was implemented to analyze the differential gene expression between healthy and diseased samples in both all cells as well as specific cell subsets.
 
-This project successfully integrated scRNAseq data from AS samples and healthy controls from multiple sources. The fastq files were mapped correctly and generated count matrix, barcode, and gene list files. All samples had these three files, which were used to create  Seurat object for each sample, which were merged into one large object. The combined Seurat object was batch corrected and the diseased samples were grouped. This cleaned object was used to create UMAPs to better understand the structure of the data and identify which clusters represent the cell types of interest. A DESeq2 pipeline was implemented to analyze the differential gene expression between healhty and diseased samples in both all cells as well as specific cell subsets.
-
-However, the DESeq2 results do not reflect the expression that was expected. With low cell counts and extremely low gene expression, the subsetted cell type data is very sparse and difficult to interpret. The comparison with all cell types included showed several genes up-regulated in the diseased group related to metabolism, supporting the hypothesis that AS is driven my metabolic processes. 
+However, the DESeq2 results do not reflect the expression that was expected. With low cell counts and extremely low gene expression, the subsetted cell type data was very sparse and difficult to interpret. The comparison with all cell types included showed several genes up-regulated in the diseased group related to metabolism, supporting the hypothesis that AS is driven my metabolic processes. 
 
 To correct the subsetted cell type data, I have filtered out any genes with zero counts, confirmed that the adjusted p-values are being calculated correctly, namely with the Benjamini-Hochberg procedure, and I have tried running a Wilcoxon rank sum test in place of DESeq2. I have also tried running a pipeline without pseudobulking in order to preserve cell counts, as the subsetted groups had low cell counts (less than 150). While these efforts did not create the results we were looking for, there are several other possibilities for this sparsity. In the following week, I will investigate the following:
 
@@ -1674,6 +2258,21 @@ To correct the subsetted cell type data, I have filtered out any genes with zero
 6. Run Enrichr pathway analysis on new results
 
 These steps will confirm that the pipeline is correctly implemented so that we can have confidence in the data and can determine whether an alternative approach is needed.  
+
+# Feb/25 Update:
+I was able to correct the cell-level comparisons by implementing the Wilcoxon rand sum test instead of DESeq2. The main issue was, after pseudobulking the data and subsetting the Idents (clusters) for each cell type, DESeq2 could not handle the sparse matrices. Since DESeq2 uses a negative binomial model to estimate the variability across replicates (samples) and includes zeroes, this can lead to strange p-values if there are a lot of zeroes in the data. To resolve this, I removed the pseudobulking and switched to a Wilcoxon rank sum test, which compares the ranks of expression for nonzero values between groups (samples). A log normalized matrix of counts was the input for this test, as the Wilcoxon function does not automatically normalize the data like DESeq2 does. 
+
+After pseudobulking was removed and the Wilcoxon rank sum test was implemented, I was able to generate volcano plots with significant genes. The next step is to investigate the up and down regulated genes and their pathways. I could also re-identify cell types by generating gene expression heatmaps and pulling clusters with specific genes of interest rather than relying on Seurat's built in FindMarkers cell type identification. In the following week I will work on the following:
+
+1. Re-run pipeline to re-identify clusters
+2. Investigate top genes and their pathways
+3. Generate gene expression heatmaps for genes of interest
+
+
+
+
+
+
 
 
 
